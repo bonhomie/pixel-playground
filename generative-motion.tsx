@@ -513,7 +513,7 @@ export default function App(){
       {showPanel&&(
         <div style={{position:"absolute",top:46,left:12,width:220,background:"#000",borderRadius:0,padding:14,color:"#ccc",fontSize:11,border:"1px solid #2a2a2a",zIndex:10,maxHeight:"calc(100vh - 58px)",overflowY:"auto",fontFamily:"'Manrope',sans-serif"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
-            <img src="/lil-logo.svg" alt="" width={21} height={21} style={{display:"block",flexShrink:0}} />
+            <img src="/assets/lil-logo.svg" alt="" width={21} height={21} style={{display:"block",flexShrink:0}} />
             <span style={{fontWeight:700,fontSize:10,letterSpacing:1,textTransform:"uppercase",color:"#fff"}}>Pixel Playground</span>
           </div>
           <Section label="Dance">
