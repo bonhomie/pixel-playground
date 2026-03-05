@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
-function cubicBezier(p1x,p1y,p2x,p2y,t){
+type Vec2 = { gx: number; gy: number };
+
+function cubicBezier(p1x: number, p1y: number, p2x: number, p2y: number, t: number): number {
   const cx=3*p1x,bx=3*(p2x-p1x)-cx,ax=1-cx-bx;
   const cy=3*p1y,by=3*(p2y-p1y)-cy,ay=1-cy-by;
   let g=t;for(let i=0;i<12;i++){const e=((ax*g+bx)*g+cx)*g-t;if(Math.abs(e)<1e-7)break;const d=(3*ax*g+2*bx)*g+cx;if(Math.abs(d)<1e-7)break;g-=e/d;}
@@ -16,27 +18,27 @@ const COLORS=[
 ];
 const BG_OPTIONS=[{hex:"#ffffff",n:"Light"},{hex:"#0d0d0d",n:"Dark"},...COLORS];
 
-function hash(x,y){let h=(x*374761393+y*668265263)^(x*y);h=(h^(h>>13))*1274126177;h=h^(h>>16);return(h&0x7fffffff)/0x7fffffff;}
+function hash(x: number, y: number): number {let h=(x*374761393+y*668265263)^(x*y);h=(h^(h>>13))*1274126177;h=h^(h>>16);return(h&0x7fffffff)/0x7fffffff;}
 
 // Each phase has a FIXED number of element slots.
 // Elements that "don't exist yet" or "have merged" sit at the same position as their parent.
 // This way every slot always has a defined position and interpolation is always between matching indices.
-function buildWorkflows(S, M) {
+function buildWorkflows(S: number, M: number): { name: string; desc: string; phases: Vec2[][]; speeds: number[]; N: number } {
   // For M=1: max 2 elements. For M=2: max 4. For M=3: max 8.
   const N = Math.pow(2, M);
-  const spds = [];
+  const spds: number[] = [];
 
   // Helper: create a phase with N slots, filling unused with copies of nearest
-  const mk = (positions, spd) => {
-    const out = [];
+  const mk = (positions: Vec2[], spd?: number): Vec2[] => {
+    const out: Vec2[] = [];
     for (let i = 0; i < N; i++) {
       out.push(positions[i] || positions[positions.length - 1]);
     }
-    spds.push(spd || 1);
+    spds.push(spd ?? 1);
     return out;
   };
 
-  const p = [];
+  const p: Vec2[][] = [];
 
   // === FIRST HALF: vertical axis ===
   // All at center
@@ -126,10 +128,10 @@ function buildWorkflows(S, M) {
   return{name:"Workflows",desc:`1→${N}→2→1→2→${N}→2→1`,phases:p,speeds:spds,N};
 }
 
-function buildSignal(S,M){
-  const N=Math.pow(2,M);const spds=[];
-  const mk=(pos,spd)=>{const o=[];for(let i=0;i<N;i++)o.push(pos[i]||pos[pos.length-1]);spds.push(spd||1);return o;};
-  const p=[mk([{gx:0,gy:0}])];
+function buildSignal(S: number, M: number): { name: string; desc: string; phases: Vec2[][]; speeds: number[]; N: number } {
+  const N=Math.pow(2,M);const spds: number[]=[];
+  const mk=(pos: Vec2[], spd?: number): Vec2[]=>{const o: Vec2[]=[];for(let i=0;i<N;i++)o.push(pos[i]||pos[pos.length-1]);spds.push(spd??1);return o;};
+  const p: Vec2[][]=[mk([{gx:0,gy:0}])];
   p.push(mk([{gx:0,gy:-S},{gx:0,gy:S}]));
   if(M>=2)p.push(mk([{gx:0,gy:-S*2},{gx:0,gy:S*2},{gx:-S,gy:0},{gx:S,gy:0}]));
   if(M>=2)p.push(mk([{gx:-S,gy:-S},{gx:S,gy:-S},{gx:-S,gy:S},{gx:S,gy:S}]));
@@ -137,10 +139,10 @@ function buildSignal(S,M){
   p.push(mk([{gx:0,gy:0}]));
   return{name:"Signal",desc:"Pulse outward and back",phases:p,speeds:spds,N};
 }
-function buildStack(S,M){
-  const N=Math.pow(2,M);const spds=[];
-  const mk=(pos,spd)=>{const o=[];for(let i=0;i<N;i++)o.push(pos[i]||pos[pos.length-1]);spds.push(spd||1);return o;};
-  const p=[mk([{gx:0,gy:0}])];
+function buildStack(S: number, M: number): { name: string; desc: string; phases: Vec2[][]; speeds: number[]; N: number } {
+  const N=Math.pow(2,M);const spds: number[]=[];
+  const mk=(pos: Vec2[], spd?: number): Vec2[]=>{const o: Vec2[]=[];for(let i=0;i<N;i++)o.push(pos[i]||pos[pos.length-1]);spds.push(spd??1);return o;};
+  const p: Vec2[][]=[mk([{gx:0,gy:0}])];
   p.push(mk([{gx:S,gy:0},{gx:-S,gy:0}]));
   if(M>=2)p.push(mk([{gx:S,gy:-S},{gx:-S,gy:S},{gx:S,gy:S},{gx:-S,gy:-S}]));
   p.push(mk([{gx:0,gy:-S},{gx:0,gy:S}]));
@@ -148,17 +150,19 @@ function buildStack(S,M){
   return{name:"Stack",desc:"Layers sliding over",phases:p,speeds:spds,N};
 }
 
-const PRESETS={"Snap":[[0.95,0],[0.05,1]],"Step":[[0.0,0.95],[1.0,0.05]],"Hard":[[0.98,0],[0.02,1]],"Ease":[[0.42,0],[0.58,1]]};
+const PRESETS: Record<string, [[number, number], [number, number]]> ={"Snap":[[0.95,0],[0.05,1]],"Step":[[0.0,0.95],[1.0,0.05]],"Hard":[[0.98,0],[0.02,1]],"Ease":[[0.42,0],[0.58,1]]};
 
-function CurveEditor({p1,p2,onChange}){
-  const ref=useRef(null);const[dr,setDr]=useState(null);
+interface CurveEditorProps { p1: [number, number]; p2: [number, number]; onChange: (a: [number, number], b: [number, number]) => void; }
+
+function CurveEditor({p1,p2,onChange}: CurveEditorProps){
+  const ref=useRef<SVGSVGElement>(null);const[dr,setDr]=useState<number | null>(null);
   const W=192,H=90,pad=8;
-  const toS=(x,y)=>[pad+x*(W-pad*2),pad+(1-y)*(H-pad*2)];
-  const fromS=(x,y)=>[Math.max(0,Math.min(1,(x-pad)/(W-pad*2))),Math.max(-0.5,Math.min(2,1-(y-pad)/(H-pad*2)))];
+  const toS=(x: number,y: number): [number, number]=>[pad+x*(W-pad*2),pad+(1-y)*(H-pad*2)];
+  const fromS=(x: number,y: number): [number, number]=>[Math.max(0,Math.min(1,(x-pad)/(W-pad*2))),Math.max(-0.5,Math.min(2,1-(y-pad)/(H-pad*2)))];
   const[s1x,s1y]=toS(p1[0],p1[1]);const[s2x,s2y]=toS(p2[0],p2[1]);
   const[o0x,o0y]=toS(0,0);const[o1x,o1y]=toS(1,1);
-  const pts=[];for(let i=0;i<=60;i++){const t=i/60;const y=cubicBezier(p1[0],p1[1],p2[0],p2[1],t);const[px,py]=toS(t,y);pts.push(`${px},${py}`);}
-  const hm=useCallback(e=>{if(!dr||!ref.current)return;const r=ref.current.getBoundingClientRect();const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;const cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top;const[nx,ny]=fromS(cx,cy);if(dr===1)onChange([nx,ny],p2);else onChange(p1,[nx,ny]);},[dr,p1,p2,onChange]);
+  const pts: string[]=[];for(let i=0;i<=60;i++){const t=i/60;const y=cubicBezier(p1[0],p1[1],p2[0],p2[1],t);const[px,py]=toS(t,y);pts.push(`${px},${py}`);}
+  const hm=useCallback((e: MouseEvent | TouchEvent)=>{if(!dr||!ref.current)return;const r=ref.current.getBoundingClientRect();const clientX="touches" in e?e.touches[0].clientX:e.clientX;const clientY="touches" in e?e.touches[0].clientY:e.clientY;const cx=clientX-r.left;const cy=clientY-r.top;const[nx,ny]=fromS(cx,cy);if(dr===1)onChange([nx,ny],p2);else onChange(p1,[nx,ny]);},[dr,p1,p2,onChange]);
   const hu=useCallback(()=>setDr(null),[]);
   useEffect(()=>{if(dr){window.addEventListener("mousemove",hm);window.addEventListener("mouseup",hu);window.addEventListener("touchmove",hm,{passive:false});window.addEventListener("touchend",hu);return()=>{window.removeEventListener("mousemove",hm);window.removeEventListener("mouseup",hu);window.removeEventListener("touchmove",hm);window.removeEventListener("touchend",hu);};}},[dr,hm,hu]);
   return(
@@ -174,7 +178,9 @@ function CurveEditor({p1,p2,onChange}){
   );
 }
 
-function CPick({colors,setColors,idx}){
+interface CPickProps { colors: string[]; setColors: (c: string[]) => void; idx: number; }
+
+function CPick({colors,setColors,idx}: CPickProps){
   const[open,setOpen]=useState(false);
   return(
     <div style={{position:"relative"}}>
@@ -201,24 +207,28 @@ function BgColorPick({value,onChange}:{value:string;onChange:(hex:string|null)=>
   );
 }
 
-function Section({label,children}){
+interface SectionProps { label: string; children: React.ReactNode; }
+
+function Section({label,children}: SectionProps){
   return(<div style={{marginBottom:12}}>
     <div style={{fontSize:9,color:"#666",marginBottom:5,textTransform:"uppercase",letterSpacing:0.8,fontWeight:600}}>{label}</div>
     {children}
   </div>);
 }
 
-function projectCubeFace(cx,cy,sz,aX,aY){
+function projectCubeFace(cx: number, cy: number, sz: number, aX: number, aY: number): { pts: number[][]; avgZ: number; idx: number }[] {
   const hs=sz/2,cos=Math.cos,sin=Math.sin;
-  const v=[[-hs,-hs,hs],[hs,-hs,hs],[hs,hs,hs],[-hs,hs,hs],[-hs,-hs,-hs],[hs,-hs,-hs],[hs,hs,-hs],[-hs,hs,-hs]];
-  const rot=([x,y,z])=>{let y1=y*cos(aX)-z*sin(aX),z1=y*sin(aX)+z*cos(aX);y=y1;z=z1;let x1=x*cos(aY)+z*sin(aY),z2=-x*sin(aY)+z*cos(aY);return[x1,y,z2];};
+  const v: [number, number, number][]=[[-hs,-hs,hs],[hs,-hs,hs],[hs,hs,hs],[-hs,hs,hs],[-hs,-hs,-hs],[hs,-hs,-hs],[hs,hs,-hs],[-hs,hs,-hs]];
+  const rot=([x,y,z]: [number, number, number]): [number, number, number]=>{let y1=y*cos(aX)-z*sin(aX),z1=y*sin(aX)+z*cos(aX);return[x*cos(aY)+z1*sin(aY),y1,-x*sin(aY)+z1*cos(aY)];};
   const rv=v.map(rot);
   const faces=[[0,1,2,3],[1,5,6,2],[5,4,7,6],[4,0,3,7],[4,5,1,0],[3,2,6,7]];
   return faces.map((f,i)=>{const pts=f.map(j=>[cx+rv[j][0],cy+rv[j][1]]);const az=f.reduce((s,j)=>s+rv[j][2],0)/4;return{pts,avgZ:az,idx:i};}).sort((a,b)=>a.avgZ-b.avgZ);
 }
 
+type DanceKey = "workflows" | "signal" | "stack";
+
 export default function App(){
-  const canvasRef=useRef(null);const animRef=useRef(null);const timeRef=useRef(0);const lastRef=useRef(0);
+  const canvasRef=useRef<HTMLCanvasElement | null>(null);const animRef=useRef<number | null>(null);const timeRef=useRef(0);const lastRef=useRef(0);
   const quantizedTimeRef=useRef(0);const fpsAccRef=useRef(0);
 
   const[playing,setPlaying]=useState(true);
@@ -226,9 +236,9 @@ export default function App(){
   const[seedCount,setSeedCount]=useState(1);
   const[pixelSize,setPixelSize]=useState(36);
   const[lightBg,setLightBg]=useState(false);
-  const[dance,setDance]=useState("workflows");
-  const[curveP1,setCurveP1]=useState([0.95,0]);
-  const[curveP2,setCurveP2]=useState([0.05,1]);
+  const[dance,setDance]=useState<DanceKey>("workflows");
+  const[curveP1,setCurveP1]=useState<[number, number]>([0.95,0]);
+  const[curveP2,setCurveP2]=useState<[number, number]>([0.05,1]);
   const[showPanel,setShowPanel]=useState(true);
   const[holdFrames,setHoldFrames]=useState(2);
   const[showGrid,setShowGrid]=useState(true);
@@ -270,7 +280,7 @@ export default function App(){
 
   const curDance=dances[dance];
   const phaseCount=curDance.phases.length;
-  const ease=useCallback(t=>cubicBezier(curveP1[0],curveP1[1],curveP2[0],curveP2[1],Math.max(0,Math.min(1,t))),[curveP1,curveP2]);
+  const ease=useCallback((t: number)=>cubicBezier(curveP1[0],curveP1[1],curveP2[0],curveP2[1],Math.max(0,Math.min(1,t))),[curveP1,curveP2]);
 
   const phaseTimes=useMemo(()=>{
     const holdLen=holdFrames*0.1;const times=[0];let cum=0;
@@ -289,7 +299,7 @@ export default function App(){
 
   const draw=useCallback(()=>{
     const canvas=canvasRef.current;if(!canvas)return;
-    const ctx=canvas.getContext("2d");
+    const ctx=canvas.getContext("2d");if(!ctx)return;
     const W=canvas.width,H=canvas.height;
     const sz=pixelSize;const halfSz=sz/2;
 
@@ -343,7 +353,7 @@ export default function App(){
     const t=quantizedTimeRef.current;
     const N=curDance.N;
 
-    const getState=(time)=>{
+    const getState=(time: number)=>{
       const ct=((time%cycleLen)+cycleLen)%cycleLen;
       let pi=0;
       for(let i=0;i<phaseTimes.length-1;i++){if(ct>=phaseTimes[i]&&ct<phaseTimes[i+1]){pi=i;break;}}
@@ -372,10 +382,10 @@ export default function App(){
       return{positions:out,spinning:false,spinT:0,holdAfterSpin:false,nearSpin};
     };
 
-    const parseHex=(hex)=>{const p=parseInt;return[p(hex.slice(1,3),16),p(hex.slice(3,5),16),p(hex.slice(5,7),16)];};
-    const darken=(rgb,f)=>[Math.round(rgb[0]*f),Math.round(rgb[1]*f),Math.round(rgb[2]*f)];
+    const parseHex=(hex: string): [number, number, number]=>{const p=parseInt;return[p(hex.slice(1,3),16),p(hex.slice(3,5),16),p(hex.slice(5,7),16)];};
+    const darken=(rgb: [number, number, number], f: number): [number, number, number]=>[Math.round(rgb[0]*f),Math.round(rgb[1]*f),Math.round(rgb[2]*f)];
 
-    const drawPx=(px,py,color,rgb)=>{
+    const drawPx=(px: number, py: number, color: string, rgb: [number, number, number])=>{
       const ipx=Math.round(px-halfSz),ipy=Math.round(py-halfSz);
       if(dither>0){
         const str=dither*80;const id=ctx.createImageData(sz,sz);const d=id.data;
@@ -437,12 +447,12 @@ export default function App(){
 
   useEffect(()=>{
     const canvas=canvasRef.current;if(!canvas)return;
-    const resize=()=>{const c=canvas.parentElement;canvas.width=c.clientWidth;canvas.height=c.clientHeight;};
+    const resize=()=>{const c=canvas.parentElement;if(c){canvas.width=c.clientWidth;canvas.height=c.clientHeight;}};
     resize();window.addEventListener("resize",resize);return()=>window.removeEventListener("resize",resize);
   },[]);
 
   useEffect(()=>{
-    const loop=ts=>{
+    const loop=(ts: number)=>{
       if(lastRef.current===0)lastRef.current=ts;
       const dt=(ts-lastRef.current)/1000;lastRef.current=ts;
       if(playing){
@@ -457,22 +467,25 @@ export default function App(){
       }
       draw();animRef.current=requestAnimationFrame(loop);
     };
-    animRef.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(animRef.current);
+    animRef.current=requestAnimationFrame(loop);return()=>{if(animRef.current!=null)cancelAnimationFrame(animRef.current);};
   },[playing,speed,draw,fps]);
 
-  const Sl=({label,value,onChange,min,max,step=0.01,suffix})=>(
+  interface SlProps { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step?: number; suffix?: string; }
+  const Sl=({label,value,onChange,min,max,step=0.01,suffix}: SlProps)=>(
     <div style={{marginBottom:8}}>
       <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#999",marginBottom:2}}>
-        <span>{label}</span><span style={{fontVariantNumeric:"tabular-nums",color:"#ddd"}}>{Number.isInteger(value)?value:value.toFixed(2)}{suffix||""}</span>
+        <span>{label}</span><span style={{fontVariantNumeric:"tabular-nums",color:"#ddd"}}>{Number.isInteger(value)?value:value.toFixed(2)}{suffix??""}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={e=>onChange(parseFloat(e.target.value))}
         style={{width:"100%",height:6,accentColor:"#fff",cursor:"pointer"}}/>
     </div>
   );
-  const Btn=({children,active,onClick,style:s,small})=>(
+  interface BtnProps { children: React.ReactNode; active?: boolean; onClick: () => void; style?: React.CSSProperties; small?: boolean; }
+  const Btn=({children,active,onClick,style:s,small}: BtnProps)=>(
     <button onClick={onClick} style={{padding:small?"3px 8px":"5px 10px",fontSize:small?9:10,background:active?"#1a1a1a":"#000",border:`1px solid ${active?"#555":"#2a2a2a"}`,borderRadius:0,color:active?"#fff":"#888",cursor:"pointer",fontFamily:"'Manrope',sans-serif",fontWeight:active?600:400,...s}}>{children}</button>
   );
-  const Toggle=({label,value,onChange})=>(
+  interface ToggleProps { label: string; value: boolean; onChange: (v: boolean) => void; }
+  const Toggle=({label,value,onChange}: ToggleProps)=>(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
       <span style={{fontSize:10,color:"#999"}}>{label}</span>
       <button onClick={()=>onChange(!value)} style={{width:34,height:18,background:value?"#fff":"#1a1a1a",border:"1px solid #444",borderRadius:0,cursor:"pointer",position:"relative",padding:0}}>
@@ -506,7 +519,7 @@ export default function App(){
           <Section label="Dance">
             <div style={{display:"flex",flexDirection:"column",gap:3}}>
               {Object.entries(dances).map(([k,v])=>(
-                <Btn key={k} active={dance===k} onClick={()=>setDance(k)} style={{textAlign:"left",display:"block",width:"100%"}}>
+                <Btn key={k} active={dance===k} onClick={()=>setDance(k as DanceKey)} style={{textAlign:"left",display:"block",width:"100%"}}>
                   <span style={{fontWeight:600,color:dance===k?"#fff":"#aaa"}}>{v.name}</span> <span style={{color:"#555",fontSize:9,marginLeft:4}}>{v.desc}</span>
                 </Btn>
               ))}
@@ -514,7 +527,7 @@ export default function App(){
           </Section>
           <Section label="Colors">
             <div style={{display:"flex",gap:10,alignItems:"center"}}>
-              {[["Front",0],["Mid",1],["Back",2]].map(([l,i])=>(
+              {([["Front",0],["Mid",1],["Back",2]] as const).map(([l,i])=>(
                 <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
                   <CPick colors={colors} setColors={setColors} idx={i}/>
                   <span style={{fontSize:8,color:"#555"}}>{l}</span>
